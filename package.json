@@ -1,0 +1,13 @@
+{
+  "name": "sap-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.2",
+    "wait-on": "^7.2.0"
+  }
+}
