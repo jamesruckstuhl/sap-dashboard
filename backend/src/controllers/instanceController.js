@@ -76,6 +76,8 @@ async function createInstance(data) {
     winrm_use_ssl: winrm_use_ssl ? 1 : 0,
     iv: encryptedSapPwd.iv,
     auth_tag: encryptedSapPwd.authTag,
+    winrm_iv: encryptedWinrmPwd ? encryptedWinrmPwd.iv : null,
+    winrm_auth_tag: encryptedWinrmPwd ? encryptedWinrmPwd.authTag : null,
   });
 
   return getInstanceById(instanceId);
@@ -130,6 +132,8 @@ async function updateInstance(id, data) {
   if (winrm_password) {
     const enc = encrypt(winrm_password);
     credUpdate.encrypted_winrm_password = enc.encrypted;
+    credUpdate.winrm_iv = enc.iv;
+    credUpdate.winrm_auth_tag = enc.authTag;
   }
 
   if (Object.keys(credUpdate).length > 0) {
@@ -169,8 +173,8 @@ async function getDecryptedCredentials(instanceId) {
   let winrmPassword = null;
   if (cred.encrypted_winrm_password) {
     winrmPassword = decrypt({
-      iv: cred.iv,
-      authTag: cred.auth_tag,
+      iv: cred.winrm_iv,
+      authTag: cred.winrm_auth_tag,
       encrypted: cred.encrypted_winrm_password,
     });
   }

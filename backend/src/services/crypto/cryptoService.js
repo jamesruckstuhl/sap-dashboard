@@ -46,7 +46,7 @@ function encrypt(plaintext) {
  * @returns {string} plaintext
  */
 function decrypt({ iv, authTag, encrypted }) {
-  if (!iv || !authTag || !encrypted) {
+  if (iv == null || authTag == null || encrypted == null) {
     throw new Error('Invalid encrypted object: missing iv, authTag, or encrypted fields');
   }
 

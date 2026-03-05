@@ -1,17 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock nodemailer before any imports
-vi.mock('nodemailer', () => {
-  const sendMailMock = vi.fn().mockResolvedValue({ messageId: 'test-message-id' });
-  const createTransportMock = vi.fn(() => ({ sendMail: sendMailMock }));
-  return {
-    default: { createTransport: createTransportMock },
-    createTransport: createTransportMock,
-    __sendMailMock: sendMailMock,
-    __createTransportMock: createTransportMock,
-  };
-});
-
 // Mock the database module
 vi.mock('../../src/db/database.js', () => ({
   db: vi.fn(() => ({
@@ -46,11 +34,15 @@ const mockSmtpOverride = {
 
 describe('emailService', () => {
   let sendMailMock;
+  let createTransportSpy;
 
   beforeEach(() => {
-    sendMailMock = nodemailer.createTransport().sendMail;
-    sendMailMock.mockClear();
-    nodemailer.createTransport.mockClear();
+    sendMailMock = vi.fn().mockResolvedValue({ messageId: 'test-message-id' });
+    createTransportSpy = vi.spyOn(nodemailer, 'createTransport').mockReturnValue({ sendMail: sendMailMock });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('buildEmailTemplate', () => {
@@ -91,7 +83,7 @@ describe('emailService', () => {
     it('should call nodemailer createTransport with smtpOverride config', async () => {
       await sendAlert('PRD', 'Test Alert Subject', '<p>Alert body</p>', ['admin@company.com'], null, mockSmtpOverride);
 
-      expect(nodemailer.createTransport).toHaveBeenCalledWith(mockSmtpOverride);
+      expect(createTransportSpy).toHaveBeenCalledWith(mockSmtpOverride);
     });
 
     it('should call sendMail with correct recipients', async () => {

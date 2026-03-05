@@ -1,6 +1,6 @@
 'use strict';
 
-const mockData = require('../../tests/fixtures/sapMockData');
+const mockData = require('../../../tests/fixtures/sapMockData');
 
 const isMockMode = () => process.env.SAP_MOCK_MODE === 'true';
 

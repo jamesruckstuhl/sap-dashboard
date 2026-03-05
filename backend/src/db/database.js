@@ -57,7 +57,18 @@ async function createTables() {
       table.integer('winrm_use_ssl').defaultTo(0);
       table.text('iv').notNullable();
       table.text('auth_tag').notNullable();
+      table.text('winrm_iv');
+      table.text('winrm_auth_tag');
     });
+  } else {
+    // Add winrm_iv / winrm_auth_tag columns if they don't exist yet (migration)
+    const hasWinrmIv = await db.schema.hasColumn('instance_credentials', 'winrm_iv');
+    if (!hasWinrmIv) {
+      await db.schema.table('instance_credentials', (table) => {
+        table.text('winrm_iv');
+        table.text('winrm_auth_tag');
+      });
+    }
   }
 
   const hasEmailConfig = await db.schema.hasTable('instance_email_config');
