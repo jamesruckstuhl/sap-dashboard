@@ -89,6 +89,7 @@ router.delete(
       const allSuccess = results.every((r) => r.success);
       res.json({
         success: allSuccess,
+        deleted: results.filter((r) => r.success).length,
         results,
         message: allSuccess ? 'All locks deleted' : 'Some locks could not be deleted',
       });

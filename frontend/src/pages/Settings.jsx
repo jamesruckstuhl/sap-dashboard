@@ -19,18 +19,19 @@ export default function Settings() {
 
   const [form, setForm] = useState(null);
   useEffect(() => {
-    if (emailConfig) {
+    if (emailConfig !== undefined) {
+      const cfg = emailConfig || {};
       setForm({
-        smtp_host: emailConfig.smtp_host || '',
-        smtp_port: emailConfig.smtp_port || 587,
-        smtp_user: emailConfig.smtp_user || '',
+        smtp_host: cfg.smtp_host || '',
+        smtp_port: cfg.smtp_port || 587,
+        smtp_user: cfg.smtp_user || '',
         smtp_password: '',
-        from_address: emailConfig.from_address || '',
-        alert_emails: (emailConfig.alert_emails || []).join(', '),
-        report_time: emailConfig.report_time || '06:00',
-        report_enabled: emailConfig.report_enabled ?? true,
-        tablespace_pct_threshold: emailConfig.tablespace_pct_threshold ?? 85,
-        tablespace_mb_threshold: emailConfig.tablespace_mb_threshold ?? 500,
+        from_address: cfg.from_address || '',
+        alert_emails: (cfg.alert_emails || []).join(', '),
+        report_time: cfg.report_time || '06:00',
+        report_enabled: cfg.report_enabled ?? true,
+        tablespace_pct_threshold: cfg.tablespace_pct_threshold ?? 85,
+        tablespace_mb_threshold: cfg.tablespace_mb_threshold ?? 500,
       });
     }
   }, [emailConfig]);

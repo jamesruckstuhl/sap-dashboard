@@ -31,23 +31,23 @@ export const login = (username, password) =>
 export const getMe = () => api.get('/auth/me').then((r) => r.data);
 
 // Instances
-export const getInstances = () => api.get('/instances').then((r) => r.data);
-export const getInstance = (id) => api.get(`/instances/${id}`).then((r) => r.data);
-export const createInstance = (data) => api.post('/instances', data).then((r) => r.data);
-export const updateInstance = (id, data) => api.put(`/instances/${id}`, data).then((r) => r.data);
+export const getInstances = () => api.get('/instances').then((r) => r.data.instances);
+export const getInstance = (id) => api.get(`/instances/${id}`).then((r) => r.data.instance);
+export const createInstance = (data) => api.post('/instances', data).then((r) => r.data.instance);
+export const updateInstance = (id, data) => api.put(`/instances/${id}`, data).then((r) => r.data.instance);
 export const deleteInstance = (id) => api.delete(`/instances/${id}`);
 export const testConnection = (id) =>
   api.post(`/instances/${id}/test-connection`).then((r) => r.data);
 
 // Tablespace
 export const getTablespace = (instanceId) =>
-  api.get(`/tablespace/${instanceId}`).then((r) => r.data);
+  api.get(`/tablespace/${instanceId}`).then((r) => r.data.tablespaces);
 export const runBrtools = (instanceId, tablespace, sizeGb) =>
   api.post(`/tablespace/${instanceId}/brtools`, { tablespace, sizeGb }).then((r) => r.data);
 
 // Background Jobs
 export const getJobs = (instanceId, params) =>
-  api.get(`/jobs/${instanceId}`, { params }).then((r) => r.data);
+  api.get(`/jobs/${instanceId}`, { params }).then((r) => r.data.jobs);
 export const rerunJob = (instanceId, jobname, jobcount) =>
   api.post(`/jobs/${instanceId}/rerun`, { jobname, jobcount }).then((r) => r.data);
 export const getJobLog = (instanceId, jobname, jobcount) =>
@@ -55,20 +55,20 @@ export const getJobLog = (instanceId, jobname, jobcount) =>
 
 // Enqueue Locks
 export const getLocks = (instanceId) =>
-  api.get(`/locks/${instanceId}`).then((r) => r.data);
+  api.get(`/locks/${instanceId}`).then((r) => r.data.locks);
 export const deleteLocks = (instanceId, locks) =>
   api.delete(`/locks/${instanceId}`, { data: { locks } }).then((r) => r.data);
 
 // Failed Updates
 export const getUpdates = (instanceId) =>
-  api.get(`/updates/${instanceId}`).then((r) => r.data);
+  api.get(`/updates/${instanceId}`).then((r) => r.data.updates);
 export const deleteUpdates = (instanceId, vbkeys) =>
   api.delete(`/updates/${instanceId}`, { data: { vbkeys } }).then((r) => r.data);
 
 // Settings
 export const getEmailConfig = (instanceId) =>
-  api.get(`/settings/${instanceId}/email`).then((r) => r.data);
+  api.get(`/settings/${instanceId}/email`).then((r) => r.data.emailConfig);
 export const updateEmailConfig = (instanceId, data) =>
-  api.put(`/settings/${instanceId}/email`, data).then((r) => r.data);
+  api.put(`/settings/${instanceId}/email`, data).then((r) => r.data.emailConfig);
 
 export default api;

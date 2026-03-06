@@ -82,6 +82,7 @@ router.delete(
       const allSuccess = results.every((r) => r.success);
       res.json({
         success: allSuccess,
+        deleted: results.filter((r) => r.success).length,
         results,
         message: allSuccess ? 'All update records deleted' : 'Some records could not be deleted',
       });
