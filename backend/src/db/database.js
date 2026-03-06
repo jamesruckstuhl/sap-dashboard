@@ -123,7 +123,7 @@ async function seedDefaultAdmin() {
       role: 'admin',
       created_at: new Date().toISOString(),
     });
-    console.log('Default admin user created (username: admin, password: Admin123!)');
+    console.log('Default admin user created (username: admin) — change the password immediately.');
   }
 }
 

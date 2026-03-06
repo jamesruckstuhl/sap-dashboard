@@ -95,7 +95,8 @@ router.put('/:instanceId/email', emailConfigValidation, async (req, res, next) =
 
     if (smtp_password) {
       const enc = encrypt(smtp_password);
-      updateData.encrypted_smtp_password = enc.encrypted;
+      // Store as JSON so iv and authTag are preserved alongside ciphertext
+      updateData.encrypted_smtp_password = JSON.stringify(enc);
     }
 
     const existing = await db('instance_email_config').where({ instance_id: instanceId }).first();

@@ -18,7 +18,7 @@ function authMiddleware(req, res, next) {
     if (!secret) {
       throw new Error('JWT_SECRET not configured');
     }
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] });
     req.user = decoded;
     next();
   } catch (err) {

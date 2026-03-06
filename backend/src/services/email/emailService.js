@@ -4,6 +4,10 @@ const nodemailer = require('nodemailer');
 const { db } = require('../../db/database');
 const { decrypt } = require('../crypto/cryptoService');
 
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 /**
  * Builds a nodemailer transporter from an instance's email config.
  */
@@ -15,8 +19,6 @@ async function getTransporter(instanceId) {
 
   let smtpPassword = '';
   if (config.encrypted_smtp_password) {
-    // The IV and auth_tag are stored in the instance_credentials for credentials;
-    // for email, we encode them inline in the encrypted field as JSON
     try {
       const parsed = JSON.parse(config.encrypted_smtp_password);
       smtpPassword = decrypt(parsed);
@@ -43,6 +45,22 @@ async function getTransporter(instanceId) {
 }
 
 /**
+ * MED-6: Shared helper — resolves nodemailer transporter from smtpOverride or DB.
+ */
+async function resolveTransporter(instanceId, smtpOverride) {
+  if (smtpOverride) {
+    return {
+      transporter: nodemailer.createTransport(smtpOverride),
+      fromAddress: smtpOverride.from_address || smtpOverride.auth?.user || 'noreply@sap-dashboard.local',
+    };
+  }
+  if (instanceId) {
+    return getTransporter(instanceId);
+  }
+  throw new Error('Either instanceId or smtpOverride must be provided');
+}
+
+/**
  * Generates a clean HTML email template.
  */
 function buildEmailTemplate(title, headerColor, bodyContent) {
@@ -51,7 +69,7 @@ function buildEmailTemplate(title, headerColor, bodyContent) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  <title>${escHtml(title)}</title>
   <style>
     body { font-family: Arial, Helvetica, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
     .wrapper { max-width: 800px; margin: 24px auto; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
@@ -72,7 +90,7 @@ function buildEmailTemplate(title, headerColor, bodyContent) {
 <body>
   <div class="wrapper">
     <div class="header">
-      <h1>${title}</h1>
+      <h1>${escHtml(title)}</h1>
       <p>Generated: ${new Date().toLocaleString()}</p>
     </div>
     <div class="body">
@@ -88,13 +106,6 @@ function buildEmailTemplate(title, headerColor, bodyContent) {
 
 /**
  * Sends an alert email to a list of recipients.
- *
- * @param {string} instanceName
- * @param {string} subject
- * @param {string} htmlBody - preformatted HTML body content
- * @param {string[]} emailList
- * @param {number} [instanceId] - if provided, loads SMTP config from DB
- * @param {object} [smtpOverride] - if provided, uses this SMTP config directly
  */
 async function sendAlert(instanceName, subject, htmlBody, emailList, instanceId = null, smtpOverride = null) {
   if (!emailList || emailList.length === 0) {
@@ -102,20 +113,7 @@ async function sendAlert(instanceName, subject, htmlBody, emailList, instanceId 
     return;
   }
 
-  let transporter;
-  let fromAddress;
-
-  if (smtpOverride) {
-    transporter = nodemailer.createTransport(smtpOverride);
-    fromAddress = smtpOverride.from_address || smtpOverride.auth?.user || 'noreply@sap-dashboard.local';
-  } else if (instanceId) {
-    const result = await getTransporter(instanceId);
-    transporter = result.transporter;
-    fromAddress = result.fromAddress;
-  } else {
-    throw new Error('Either instanceId or smtpOverride must be provided to sendAlert');
-  }
-
+  const { transporter, fromAddress } = await resolveTransporter(instanceId, smtpOverride);
   const fullHtml = buildEmailTemplate(subject, '#dc2626', htmlBody);
 
   await transporter.sendMail({
@@ -125,17 +123,13 @@ async function sendAlert(instanceName, subject, htmlBody, emailList, instanceId 
     html: fullHtml,
   });
 
-  console.log(`Alert email sent: "${subject}" to ${emailList.join(', ')}`);
+  // LOW-3: log recipient count, not addresses (PII)
+  console.log(`Alert email sent: "${subject}" to ${emailList.length} recipient(s)`);
 }
 
 /**
  * Sends a daily report email with failed jobs.
- *
- * @param {string} instanceName
- * @param {object[]} failedJobs - array of job objects from BP_JOB_SELECT
- * @param {string[]} emailList
- * @param {number} [instanceId]
- * @param {object} [smtpOverride]
+ * HIGH-4: all SAP-sourced values are HTML-escaped before insertion.
  */
 async function sendDailyReport(instanceName, failedJobs, emailList, instanceId = null, smtpOverride = null) {
   if (!emailList || emailList.length === 0) {
@@ -151,20 +145,20 @@ async function sendDailyReport(instanceName, failedJobs, emailList, instanceId =
         .map(
           (job) => `
           <tr>
-            <td>${job.jobname || ''}</td>
-            <td>${job.jobcount || ''}</td>
-            <td><span class="badge badge-red">${job.status || 'ABRT'}</span></td>
-            <td>${formatSapDate(job.sdlstrtdt)} ${formatSapTime(job.sdlstrttm)}</td>
-            <td>${formatSapDate(job.enddate)} ${formatSapTime(job.endtime)}</td>
-            <td>${job.username || ''}</td>
-            <td>${job.duration != null ? `${job.duration}s` : ''}</td>
+            <td>${escHtml(job.jobname)}</td>
+            <td>${escHtml(job.jobcount)}</td>
+            <td><span class="badge badge-red">${escHtml(job.status || 'ABRT')}</span></td>
+            <td>${escHtml(formatSapDate(job.sdlstrtdt))} ${escHtml(formatSapTime(job.sdlstrttm))}</td>
+            <td>${escHtml(formatSapDate(job.enddate))} ${escHtml(formatSapTime(job.endtime))}</td>
+            <td>${escHtml(job.username)}</td>
+            <td>${job.duration != null ? `${escHtml(String(job.duration))}s` : ''}</td>
           </tr>`
         )
         .join('');
 
   const htmlBody = `
     <h2>Failed Jobs Report</h2>
-    <p><strong>Instance:</strong> ${instanceName}</p>
+    <p><strong>Instance:</strong> ${escHtml(instanceName)}</p>
     <p><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</p>
     <p><strong>Total Failed Jobs:</strong> ${failedJobs.length}</p>
     <table>
@@ -185,20 +179,7 @@ async function sendDailyReport(instanceName, failedJobs, emailList, instanceId =
     </table>
   `;
 
-  let transporter;
-  let fromAddress;
-
-  if (smtpOverride) {
-    transporter = nodemailer.createTransport(smtpOverride);
-    fromAddress = smtpOverride.from_address || smtpOverride.auth?.user || 'noreply@sap-dashboard.local';
-  } else if (instanceId) {
-    const result = await getTransporter(instanceId);
-    transporter = result.transporter;
-    fromAddress = result.fromAddress;
-  } else {
-    throw new Error('Either instanceId or smtpOverride must be provided to sendDailyReport');
-  }
-
+  const { transporter, fromAddress } = await resolveTransporter(instanceId, smtpOverride);
   const fullHtml = buildEmailTemplate(subject, '#1d4ed8', htmlBody);
 
   await transporter.sendMail({
@@ -208,7 +189,8 @@ async function sendDailyReport(instanceName, failedJobs, emailList, instanceId =
     html: fullHtml,
   });
 
-  console.log(`Daily report sent for ${instanceName} to ${emailList.join(', ')}`);
+  // LOW-3: log recipient count, not addresses (PII)
+  console.log(`Daily report sent for ${instanceName}: ${failedJobs.length} failed jobs, ${emailList.length} recipient(s)`);
 }
 
 function formatSapDate(sapDate) {

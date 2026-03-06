@@ -10,6 +10,10 @@ const { sendAlert } = require('../services/email/emailService');
 const { runBrtools } = require('../services/brtools/brtoolsService');
 
 const router = express.Router();
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 router.use(authMiddleware);
 
 // GET /api/tablespace/:instanceId
@@ -47,13 +51,13 @@ router.get('/:instanceId', async (req, res, next) => {
           .map(
             (ts) =>
               `<tr>
-                <td>${ts.tablespace}</td>
-                <td>${ts.type}</td>
-                <td>${ts.total_mb.toFixed(0)} MB</td>
-                <td>${ts.used_mb.toFixed(0)} MB</td>
-                <td>${ts.free_mb.toFixed(0)} MB</td>
-                <td style="color:red;font-weight:bold">${ts.used_pct.toFixed(1)}%</td>
-                <td>${ts.status}</td>
+                <td>${escHtml(ts.tablespace)}</td>
+                <td>${escHtml(ts.type)}</td>
+                <td>${escHtml(ts.total_mb.toFixed(0))} MB</td>
+                <td>${escHtml(ts.used_mb.toFixed(0))} MB</td>
+                <td>${escHtml(ts.free_mb.toFixed(0))} MB</td>
+                <td style="color:red;font-weight:bold">${escHtml(ts.used_pct.toFixed(1))}%</td>
+                <td>${escHtml(ts.status)}</td>
               </tr>`
           )
           .join('');
@@ -70,7 +74,7 @@ router.get('/:instanceId', async (req, res, next) => {
           <p>Please take action to extend or clean up these tablespaces.</p>
         `;
 
-        sendAlert(instance.name, `SAP Tablespace Alert - ${instance.sid}`, htmlBody, alertEmails).catch((err) =>
+        sendAlert(instance.name, `SAP Tablespace Alert - ${instance.sid}`, htmlBody, alertEmails, instanceId).catch((err) =>
           console.error('Failed to send tablespace alert:', err.message)
         );
       }
@@ -88,8 +92,13 @@ router.get('/:instanceId', async (req, res, next) => {
 router.post(
   '/:instanceId/brtools',
   [
-    body('tablespace').trim().notEmpty().withMessage('Tablespace name is required'),
-    body('sizeGb').isFloat({ gt: 0 }).withMessage('sizeGb must be a positive number'),
+    body('tablespace')
+      .trim()
+      .matches(/^[A-Z0-9_]{1,30}$/)
+      .withMessage('Tablespace name must be 1-30 uppercase letters, digits, or underscores'),
+    body('sizeGb')
+      .isFloat({ gt: 0, max: 100 })
+      .withMessage('sizeGb must be a positive number no greater than 100'),
   ],
   async (req, res, next) => {
     const instanceId = parseInt(req.params.instanceId, 10);

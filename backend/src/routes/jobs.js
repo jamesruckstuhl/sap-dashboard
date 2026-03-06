@@ -24,9 +24,9 @@ function formatDateForSap(dateStr) {
 router.get(
   '/:instanceId',
   [
-    query('dateFrom').optional().isString(),
-    query('dateTo').optional().isString(),
-    query('status').optional().isString(),
+    query('dateFrom').optional().isISO8601().withMessage('dateFrom must be a valid ISO date (YYYY-MM-DD)'),
+    query('dateTo').optional().isISO8601().withMessage('dateTo must be a valid ISO date (YYYY-MM-DD)'),
+    query('status').optional().isIn(['ABRT', 'FINI', 'READY', 'ACTIVE', 'SCHED']).withMessage('Invalid status value'),
   ],
   async (req, res, next) => {
     const instanceId = parseInt(req.params.instanceId, 10);

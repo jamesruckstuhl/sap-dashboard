@@ -43,7 +43,7 @@ export const testConnection = (id) =>
 export const getTablespace = (instanceId) =>
   api.get(`/tablespace/${instanceId}`).then((r) => r.data);
 export const runBrtools = (instanceId, tablespace, sizeGb) =>
-  api.post(`/tablespace/${instanceId}/brtools`, { tablespace, size_gb: sizeGb }).then((r) => r.data);
+  api.post(`/tablespace/${instanceId}/brtools`, { tablespace, sizeGb }).then((r) => r.data);
 
 // Background Jobs
 export const getJobs = (instanceId, params) =>

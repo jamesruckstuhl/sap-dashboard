@@ -10,12 +10,43 @@ const { decrypt } = require('../crypto/cryptoService');
 
 const isMockMode = () => process.env.SAP_MOCK_MODE === 'true';
 
+// PowerShell script — NO user-controlled data is interpolated into the body.
+// All runtime values are passed as named PowerShell parameters via spawn()
+// arguments, which the OS delivers directly to PowerShell without shell
+// parsing, eliminating script injection risk.
+const PS_SCRIPT = [
+  'param(',
+  '  [string]$ComputerName,',
+  '  [string]$WinRmUser,',
+  '  [string]$WinRmPassword,',
+  '  [int]$Port,',
+  '  [bool]$UseSSL,',
+  '  [string]$BrtoolsPath,',
+  '  [string]$Tablespace,',
+  '  [int]$SizeMb',
+  ')',
+  "$ErrorActionPreference = 'Stop'",
+  '$secPass = ConvertTo-SecureString $WinRmPassword -AsPlainText -Force',
+  '$credential = New-Object System.Management.Automation.PSCredential($WinRmUser, $secPass)',
+  '$sessionOpts = New-PSSessionOption -SkipCACheck -SkipCNCheck',
+  '$result = Invoke-Command `',
+  '  -ComputerName $ComputerName `',
+  '  -Port $Port `',
+  '  -Credential $credential `',
+  '  -UseSSL:$UseSSL `',
+  '  -SessionOption $sessionOpts `',
+  '  -ScriptBlock {',
+  '    param($brtoolsExe, $ts, $mb)',
+  '    & $brtoolsExe -f tsextend -t $ts -s $mb 2>&1',
+  '  } -ArgumentList $BrtoolsPath, $Tablespace, $SizeMb',
+  '$result',
+].join('\r\n');
+
 /**
- * Runs brtools via PowerShell Invoke-Command (WinRM) on the remote SAP Windows host.
- * Credentials are passed via a temp script file — never in process arguments.
+ * Runs brtools via PowerShell Invoke-Command (WinRM) on the remote SAP host.
  *
  * @param {number} instanceId
- * @param {string} tablespace  e.g. 'PSAPSR3'
+ * @param {string} tablespace  e.g. 'PSAPSR3' — must match /^[A-Z0-9_]{1,30}$/
  * @param {number} sizeGb      e.g. 5
  * @returns {Promise<string>} brtools console output
  */
@@ -24,18 +55,20 @@ async function runBrtools(instanceId, tablespace, sizeGb) {
     return generateMockOutput(tablespace, sizeGb);
   }
 
-  const instance = db('sap_instances').where({ id: instanceId }).first();
+  // CRIT-2 fix: await both DB queries
+  const instance = await db('sap_instances').where({ id: instanceId }).first();
   if (!instance) throw Object.assign(new Error(`Instance ${instanceId} not found`), { status: 404 });
 
-  const cred = db('instance_credentials').where({ instance_id: instanceId }).first();
+  const cred = await db('instance_credentials').where({ instance_id: instanceId }).first();
   if (!cred) throw new Error(`No credentials for instance ${instanceId}`);
   if (!cred.winrm_user || !cred.encrypted_winrm_password) {
     throw new Error('WinRM credentials not configured for this instance');
   }
 
+  // Use per-password iv/authTag (winrm_iv / winrm_auth_tag)
   const winrmPassword = decrypt({
-    iv: cred.iv,
-    authTag: cred.auth_tag,
+    iv: cred.winrm_iv,
+    authTag: cred.winrm_auth_tag,
     encrypted: cred.encrypted_winrm_password,
   });
 
@@ -44,62 +77,48 @@ async function runBrtools(instanceId, tablespace, sizeGb) {
   const brtoolsPath = instance.brtools_path || 'brtools';
   const sizeMb = Math.round(sizeGb * 1024);
 
-  // Write a temp script — credentials never appear in process args
-  const scriptId = uuidv4();
-  const scriptPath = path.join(os.tmpdir(), `brtools_${scriptId}.ps1`);
-
-  const psScript = `
-$ErrorActionPreference = 'Stop'
-$secPass = ConvertTo-SecureString "${winrmPassword.replace(/"/g, '`"')}" -AsPlainText -Force
-$credential = New-Object System.Management.Automation.PSCredential("${cred.winrm_user}", $secPass)
-$sessionOpts = New-PSSessionOption -SkipCACheck -SkipCNCheck
-$result = Invoke-Command \\
-  -ComputerName "${instance.hostname}" \\
-  -Port ${port} \\
-  -Credential $credential \\
-  -UseSSL:$${useSSL ? 'true' : 'false'} \\
-  -SessionOption $sessionOpts \\
-  -ScriptBlock {
-    param($brtoolsExe, $ts, $mb)
-    & $brtoolsExe -f tsextend -t $ts -s $mb 2>&1
-  } -ArgumentList "${brtoolsPath}", "${tablespace}", ${sizeMb}
-$result
-`.trim();
+  const scriptPath = path.join(os.tmpdir(), `brtools_${uuidv4()}.ps1`);
+  fs.writeFileSync(scriptPath, PS_SCRIPT, { encoding: 'utf8' });
 
   try {
-    fs.writeFileSync(scriptPath, psScript, { encoding: 'utf8', mode: 0o600 });
-    const output = await runPsScript(scriptPath);
-    return output;
+    return await runPsScript(scriptPath, {
+      ComputerName: instance.hostname,
+      WinRmUser: cred.winrm_user,
+      WinRmPassword: winrmPassword,
+      Port: String(port),
+      UseSSL: useSSL ? 'true' : 'false',
+      BrtoolsPath: brtoolsPath,
+      Tablespace: tablespace,
+      SizeMb: String(sizeMb),
+    });
   } finally {
     try { fs.unlinkSync(scriptPath); } catch (_) { /* best-effort cleanup */ }
   }
 }
 
-function runPsScript(scriptPath) {
-  return new Promise((resolve, reject) => {
-    const ps = spawn('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', scriptPath,
-    ]);
+/**
+ * Executes a .ps1 file with named parameters as separate OS arguments.
+ * spawn() never invokes a shell, so values cannot be interpreted as code.
+ */
+function runPsScript(scriptPath, params) {
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath];
+  for (const [key, value] of Object.entries(params)) {
+    args.push(`-${key}`, value);
+  }
 
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell.exe', args);
     const stdout = [];
     const stderr = [];
     ps.stdout.on('data', (d) => stdout.push(d.toString()));
     ps.stderr.on('data', (d) => stderr.push(d.toString()));
-
     ps.on('close', (code) => {
       const out = stdout.join('').trim();
       const err = stderr.join('').trim();
       const combined = [out, err].filter(Boolean).join('\n');
-      if (code === 0) {
-        resolve(combined);
-      } else {
-        reject(new Error(`PowerShell exited ${code}: ${combined}`));
-      }
+      if (code === 0) resolve(combined);
+      else reject(new Error(`PowerShell exited ${code}: ${combined}`));
     });
-
     ps.on('error', reject);
   });
 }

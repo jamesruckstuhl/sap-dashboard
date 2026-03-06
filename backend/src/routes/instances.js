@@ -45,7 +45,7 @@ router.post('/', instanceBodyValidation, async (req, res, next) => {
     }
 
     const instance = await instanceController.createInstance(req.body);
-    await instanceController.auditLog(req.user.username, 'CREATE_INSTANCE', instance.id, { name: instance.name });
+    instanceController.auditLog(req.user.username, 'CREATE_INSTANCE', instance.id, { name: instance.name }).catch((e) => console.error('Audit log failed:', e.message));
 
     res.status(201).json({ instance });
   } catch (err) {
@@ -91,7 +91,7 @@ router.put('/:id', updateBodyValidation, async (req, res, next) => {
     }
 
     const instance = await instanceController.updateInstance(id, req.body);
-    await instanceController.auditLog(req.user.username, 'UPDATE_INSTANCE', id, { name: instance.name });
+    instanceController.auditLog(req.user.username, 'UPDATE_INSTANCE', id, { name: instance.name }).catch((e) => console.error('Audit log failed:', e.message));
 
     res.json({ instance });
   } catch (err) {
@@ -113,7 +113,7 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     await instanceController.deleteInstance(id);
-    await instanceController.auditLog(req.user.username, 'DELETE_INSTANCE', id, { name: existing.name });
+    instanceController.auditLog(req.user.username, 'DELETE_INSTANCE', id, { name: existing.name }).catch((e) => console.error('Audit log failed:', e.message));
 
     res.status(204).send();
   } catch (err) {

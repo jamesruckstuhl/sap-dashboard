@@ -1,6 +1,16 @@
 'use strict';
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again in 15 minutes' },
+  skipSuccessfulRequests: true,
+});
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
@@ -15,7 +25,7 @@ const loginValidation = [
 ];
 
 // POST /api/auth/login
-router.post('/login', loginValidation, async (req, res, next) => {
+router.post('/login', loginLimiter, loginValidation, async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -43,7 +53,7 @@ router.post('/login', loginValidation, async (req, res, next) => {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       secret,
-      { expiresIn }
+      { expiresIn, algorithm: 'HS256' }
     );
 
     res.json({

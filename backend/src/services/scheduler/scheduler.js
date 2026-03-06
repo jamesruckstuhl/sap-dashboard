@@ -14,8 +14,8 @@ const scheduledTasks = new Map();
  */
 function parseReportTime(timeStr) {
   const [hour, minute] = (timeStr || '06:00').split(':').map(Number);
-  const h = isNaN(hour) ? 6 : hour;
-  const m = isNaN(minute) ? 0 : minute;
+  const h = isNaN(hour) || hour < 0 || hour > 23 ? 6 : hour;
+  const m = isNaN(minute) || minute < 0 || minute > 59 ? 0 : minute;
   return [m, h];
 }
 
